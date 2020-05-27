@@ -6,17 +6,18 @@ from pydub import AudioSegment
 from pydub.utils import make_chunks
 from sklearn.neighbors import KNeighborsClassifier as wknn
 from sklearn.model_selection import train_test_split
+import audiosegment
 
 
-PRED_DEBUG = True   # print result and correctness of every prediction
+PRED_DEBUG = False   # print result and correctness of every prediction
 # LOUDNESS CONFIG
 SIZE = 30           # audio snippet size (in ms) for determining loudness/time
 DEGREE = 10         # polynom degree for fitting
 
 # KNN CONFIG
-k = 3               # k neighbors
+k = 3              # k neighbors
 q = 1               # monkowski distance
-w = "distance"      # weighting
+w = "uniform"      # weighting
 TEST_SIZE = 0.2     # proportion of the dataset to include in the test split
 RANDOM_STATE = 0    # shuffle before split, int for reproducible output
 
@@ -29,24 +30,37 @@ def main():
     traindata = []  # list of data used for training
     labels = []     # list of labels (correct emotions) related to traindata
     #                   (eg traindata[0] is labels[0] emotion)
+    cmap = plt.cm.get_cmap("hsv", 8)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
     for p in os.listdir("audio"):
         if not os.path.isfile(p):
             for f in os.listdir("audio/"+p):
-                s = AudioSegment.from_file(
+                s1 = AudioSegment.from_file(
                     "audio/{}/{}".format(p, f), format="wav")
-                fdata = parse_fname(f)
-                loudPoly = get_loudpoly(s)  # get loudness/time
+                s2 = audiosegment.from_file(
+                    "audio/{}/{}".format(p, f))
+                #freqChange = getFreqChange(s2)
 
-                traindata.append(loudPoly)
+                fdata = parse_fname(f)
+                # loudPoly = get_loudpoly(s1)  # get loudness/time
+                dBFS = get_dBFS(s1)
+                freq = get_freq(s2)
+                # traindata.append(loudPoly + freqChange)
+                traindata.append([dBFS, freq])
                 labels.append(fdata.get("emotion_n"))
+                #plt.scatter(dBFS, freq, c=cmap(fdata.get("emotion_n")), label=fdata.get("emotion"), alpha=0.7)
 
                 counter += 1
         print("{}: {} files".format(p, counter))
+        #handles, labels = ax.get_legend_handles_labels()
+        #ax.legend(handles, labels)
+        # plt.show()
         break
 
     # split data into test and train
     x_train, x_test, y_train, y_test = train_test_split(
-        traindata, labels, test_size=0.2, random_state=0)
+        traindata, labels, test_size=TEST_SIZE, random_state=RANDOM_STATE)
 
     # train model
     model = wknn(n_neighbors=k, weights=w, p=q)
@@ -90,6 +104,36 @@ def get_loudpoly(s):
         if chunks[i].dBFS != -np.inf:
             xdata.append((i+1)*SIZE)
             ydata.append(chunks[i].dBFS)
+    p = np.polyfit(np.array(xdata), np.array(ydata), DEGREE)
+    return p
+
+
+def get_dBFS(s):
+    return s.dBFS
+
+
+def get_freq(s):
+    void, hist_vals = s.fft()
+    del void
+    hist_vals_real_normed = np.abs(hist_vals) / len(hist_vals)
+
+    avg = np.mean(hist_vals_real_normed)
+    return avg
+
+
+def getFreqChange(s):
+    xdata = []
+    ydata = []
+    chunks = make_chunks(s, SIZE)
+    for i in range(0, len(chunks)):
+        void, hist_vals = chunks[i].fft()
+        del void
+        hist_vals_real_normed = np.abs(hist_vals) / len(hist_vals)
+
+        avg = np.mean(hist_vals_real_normed)
+
+        xdata.append((i+1)*SIZE)
+        ydata.append(avg)
     p = np.polyfit(np.array(xdata), np.array(ydata), DEGREE)
     return p
 

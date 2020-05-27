@@ -5,46 +5,82 @@ import numpy as np
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 from sklearn.neighbors import KNeighborsClassifier as wknn
+from sklearn.model_selection import train_test_split
 
-SIZE = 30
-DEGREE = 10
 
-k = 3 # k neighbors
-q = 1 # monkowski distance
-w = "distance" # weighting
+# LOUDNESS CONFIG
+SIZE = 30       # audio snippet size (in ms) for determining loudness/time
+DEGREE = 10     # polynom degree for fitting
+
+# KNN CONFIG
+k = 3               # k neighbors
+q = 1               # monkowski distance
+w = "distance"      # weighting
+TEST_SIZE = 0.2     # proportion of the dataset to include in the test split
+RANDOM_STATE = 0    # shuffle before split, int for reproducible output
+
+emotion = ["neutral", "calm", "happy", "sad",
+           "angry", "fearful", "disgust", "suprised"]
 
 
 def main():
-    data = []
-    labels = []
+    counter = 0     # loop index
+    traindata = []  # list of data used for training
+    labels = []     # list of labels (correct emotions) related to traindata
+    #                   (eg traindata[0] is labels[0] emotion)
     for p in os.listdir("audio"):
         if not os.path.isfile(p):
             for f in os.listdir("audio/"+p):
                 s = AudioSegment.from_file(
                     "audio/{}/{}".format(p, f), format="wav")
                 fdata = parse_fname(f)
-                loudPoly = getLoudPoly(s)
-                data.append(loudPoly)
+                loudPoly = get_loudpoly(s)  # get loudness/time
+
+                traindata.append(loudPoly)
                 labels.append(fdata.get("emotion_n"))
-        print(p)
+
+                counter += 1
+        print("{}: {} files".format(p, counter))
         break
-        
 
-    test_data = []
-    test_data.append(data.pop(0))
-    labels.pop(0)
-    test_data.append(data.pop(30))
-    labels.pop(30)
+    # split data into test and train
+    x_train, x_test, y_train, y_test = train_test_split(
+        traindata, labels, test_size=0.2, random_state=0)
 
+    # train model
     model = wknn(n_neighbors=k, weights=w, p=q)
-    model.fit(data, labels)
+    model.fit(x_train, y_train)
 
     # predicting
-    print(model.predict_proba(test_data))
-    
+    accuracy = 0
+    prediction = model.predict(x_test)
+    prediction_prob = model.predict_proba(x_test)
+
+    # print results
+    for i in range(0, len(prediction)):
+        if y_test[i] == prediction[i]:
+            result = "TRUE"
+            accuracy += 1
+        else:
+            result = "FALSE"
+        print("[{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
+                                                                         emotion[prediction[i] -
+                                                                                 1].upper(),
+                                                                         emotion[y_test[i] -
+                                                                                 1].upper(),
+                                                                         np.array_repr(
+                                                                             prediction_prob[i]).replace('\n', ''),
+                                                                         emotion))
+    print("\t### RESULT ###\n")
+    print("\t{:3.2f}% ACCURACY [{}/{}]".format((accuracy /
+                                                len(x_test))*100,
+                                               accuracy,
+                                               len(x_test)))
+    print("\tn_train={} n_test={}".format(len(x_train), len(x_test)))
+    print_config()
 
 
-def getLoudPoly(s):
+def get_loudpoly(s):
     xdata = []
     ydata = []
     chunks = make_chunks(s, SIZE)
@@ -53,7 +89,6 @@ def getLoudPoly(s):
             xdata.append((i+1)*SIZE)
             ydata.append(chunks[i].dBFS)
     p = np.polyfit(np.array(xdata), np.array(ydata), DEGREE)
-    print(p)
     return p
 
 
@@ -90,6 +125,17 @@ def parse_fname(fname):
         "actor": 1 if (int(farray[6]) % 2 == 0) else 0  # 0 = blue , 1 = red
     }
     return fdict
+
+def print_config():
+    print("\n# LOUDNESS")
+    print("SIZE = {}".format(SIZE))
+    print("DEGREE = {}".format(DEGREE))
+    print("# KNN CONFIG")
+    print("k = {}".format(k))
+    print("q = {}".format(q))
+    print("w = {}".format(w))
+    print("TEST_SIZE = {}".format(TEST_SIZE))
+    print("RANDOM_STATE = {}".format(RANDOM_STATE))
 
 
 if __name__ == "__main__":

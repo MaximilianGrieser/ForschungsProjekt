@@ -8,9 +8,10 @@ from sklearn.neighbors import KNeighborsClassifier as wknn
 from sklearn.model_selection import train_test_split
 
 
+PRED_DEBUG = True   # print result and correctness of every prediction
 # LOUDNESS CONFIG
-SIZE = 30       # audio snippet size (in ms) for determining loudness/time
-DEGREE = 10     # polynom degree for fitting
+SIZE = 30           # audio snippet size (in ms) for determining loudness/time
+DEGREE = 10         # polynom degree for fitting
 
 # KNN CONFIG
 k = 3               # k neighbors
@@ -63,14 +64,15 @@ def main():
             accuracy += 1
         else:
             result = "FALSE"
-        print("[{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
-                                                                         emotion[prediction[i] -
-                                                                                 1].upper(),
-                                                                         emotion[y_test[i] -
-                                                                                 1].upper(),
-                                                                         np.array_repr(
-                                                                             prediction_prob[i]).replace('\n', ''),
-                                                                         emotion))
+        if PRED_DEBUG:
+            print("[{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
+                                                                                  emotion[prediction[i] -
+                                                                                          1].upper(),
+                                                                                  emotion[y_test[i] -
+                                                                                          1].upper(),
+                                                                                  np.array_repr(
+                                                                                      prediction_prob[i]).replace('\n', ''),
+                                                                                  emotion))
     print("\t### RESULT ###\n")
     print("\t{:3.2f}% ACCURACY [{}/{}]".format((accuracy /
                                                 len(x_test))*100,
@@ -125,6 +127,7 @@ def parse_fname(fname):
         "actor": 1 if (int(farray[6]) % 2 == 0) else 0  # 0 = blue , 1 = red
     }
     return fdict
+
 
 def print_config():
     print("\n# LOUDNESS")

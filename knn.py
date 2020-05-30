@@ -17,50 +17,22 @@ DEGREE = 10         # polynom degree for fitting
 # KNN CONFIG
 k = 3              # k neighbors
 q = 1               # monkowski distance
-w = "uniform"      # weighting
-TEST_SIZE = 0.2     # proportion of the dataset to include in the test split
-RANDOM_STATE = 0    # shuffle before split, int for reproducible output
+w = "distance"      # weighting
+TEST_SIZE = 0.25     # proportion of the dataset to include in the test split
+RANDOM_STATE = 1    # shuffle before split, int for reproducible output
 
 emotion = ["neutral", "calm", "happy", "sad",
            "angry", "fearful", "disgust", "suprised"]
 
 
 def main():
-    counter = 0     # loop index
-    traindata = []  # list of data used for training
-    labels = []     # list of labels (correct emotions) related to traindata
-    #                   (eg traindata[0] is labels[0] emotion)
-    cmap = plt.cm.get_cmap("hsv", 8)
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    for p in os.listdir("audio"):
-        if not os.path.isfile(p):
-            for f in os.listdir("audio/"+p):
-                s1 = AudioSegment.from_file(
-                    "audio/{}/{}".format(p, f), format="wav")
-                s2 = audiosegment.from_file(
-                    "audio/{}/{}".format(p, f))
-                #freqChange = getFreqChange(s2)
 
-                fdata = parse_fname(f)
-                # loudPoly = get_loudpoly(s1)  # get loudness/time
-                dBFS = get_dBFS(s1)
-                freq = get_freq(s2)
-                # traindata.append(loudPoly + freqChange)
-                traindata.append([dBFS, freq])
-                labels.append(fdata.get("emotion_n"))
-                #plt.scatter(dBFS, freq, c=cmap(fdata.get("emotion_n")), label=fdata.get("emotion"), alpha=0.7)
-
-                counter += 1
-        print("{}: {} files".format(p, counter))
-        #handles, labels = ax.get_legend_handles_labels()
-        #ax.legend(handles, labels)
-        # plt.show()
-        break
+    # read audio data from file
+    data, labels = readData()
 
     # split data into test and train
     x_train, x_test, y_train, y_test = train_test_split(
-        traindata, labels, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+        data, labels, test_size=TEST_SIZE, random_state=RANDOM_STATE)
 
     # train model
     model = wknn(n_neighbors=k, weights=w, p=q)
@@ -96,6 +68,30 @@ def main():
     print_config()
 
 
+def readData():
+    counter = 0     # loop index
+    data = []       # list of data used for training/testing
+    labels = []     # list of labels (correct emotions) related to traindata
+    #                   (eg traindata[0] is labels[0] emotion)
+    for p in os.listdir("audio"):
+        if not os.path.isfile(p):
+            for f in os.listdir("audio/"+p):
+                s1 = AudioSegment.from_file(
+                    "audio/{}/{}".format(p, f), format="wav")
+                s2 = audiosegment.from_file(
+                    "audio/{}/{}".format(p, f))
+                freqChange, freqMax, freqAvg = getFreqChange(s2)
+                fdata = parse_fname(f)
+                loudPoly, dBFS, maxDBFS = get_loudpoly(s1)
+                data.append(loudPoly + freqChange + dBFS +
+                            maxDBFS + freqMax + freqAvg)
+                # Loudness polynom parameter, Freq polynom parameter, avg loudness in db, max loudness, max freq, avg freq
+                labels.append(fdata.get("emotion_n"))
+                counter += 1
+        print("{}: {} files".format(p, counter))
+    return data, labels
+
+
 def get_loudpoly(s):
     xdata = []
     ydata = []
@@ -105,20 +101,7 @@ def get_loudpoly(s):
             xdata.append((i+1)*SIZE)
             ydata.append(chunks[i].dBFS)
     p = np.polyfit(np.array(xdata), np.array(ydata), DEGREE)
-    return p
-
-
-def get_dBFS(s):
-    return s.dBFS
-
-
-def get_freq(s):
-    void, hist_vals = s.fft()
-    del void
-    hist_vals_real_normed = np.abs(hist_vals) / len(hist_vals)
-
-    avg = np.mean(hist_vals_real_normed)
-    return avg
+    return p, s.dBFS, s.max_dBFS
 
 
 def getFreqChange(s):
@@ -135,7 +118,9 @@ def getFreqChange(s):
         xdata.append((i+1)*SIZE)
         ydata.append(avg)
     p = np.polyfit(np.array(xdata), np.array(ydata), DEGREE)
-    return p
+    max_value = np.amax(np.array(ydata))
+    avg_value = np.mean(np.array(ydata))
+    return p, max_value, avg_value
 
 
 def parse_fname(fname):

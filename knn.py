@@ -169,6 +169,15 @@ def print_config():
     print("TEST_SIZE = {}".format(TEST_SIZE))
     print("RANDOM_STATE = {}".format(RANDOM_STATE))
 
+def derivative(poly):
+    #This function calculates the derivative of a n-th degree polynomial 
+    #'poly' is an array in the form of e.g. [a, b, c] where ax^2+bx+c
+    #An array in similar form like 'poly' is returned.
+    if len(poly)==1:
+        return [0]
+    deriv_poly = [poly[i] * (len(poly)-i-1) for i in range(0, len(poly)-1)]
+    return deriv_poly
+
 
 if __name__ == "__main__":
     main()

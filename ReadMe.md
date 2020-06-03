@@ -1,4 +1,4 @@
-# file structre
+# file structure
 ```
 root
  | - knn.py

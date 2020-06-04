@@ -36,14 +36,18 @@ root
 # config structure
 ```
 [DEBUG]
+verbose=0
 prediction_details=0
 
 [KNN]
 k=3             
 q=1             
-w=distance      
+w=distance  
+n_jobs=-1
+
+[DATA]
 test_size=0.25  
-random_state=10 
+random_state=None 
 
 [POLYFIT]
 snippet_size=30 
@@ -51,9 +55,19 @@ poly_degree=10
 
 [DATABASES]
 RAVDESS-DB
-;Toronto-DB
+Toronto-DB
 ;beaEmoV-DB
 ;jenieEmoV-DB
 ;joshEmoV-DB
 ;samEmoV-DB
+
+[EMOTIONS]
+;["happy", "suprise", "angry", "sad", "fear", "disgust", "neutral"]
+happy
+suprise
+angry
+sad
+fear
+disgust
+neutral
 ```

@@ -1,13 +1,16 @@
 # setup
 0.  Install Python 3.7.4+ (Anything 3+ probably works)  
 1.  Clone git
-2.  Create virtual enironment
+2.  Create virtual enironment and activate it
 3.  Install python packages
 4.  Run `main.py`
 ```
 python3 -V
 
 python3 -m venv .venv
+
+.venv\Scripts\activate.bat [WINDOWS]
+source .venv/bin/activate  [LINUX]
 
 pip install -r requirements.txt
 

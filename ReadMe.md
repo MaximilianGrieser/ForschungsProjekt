@@ -22,11 +22,13 @@ root
  | - blackbox.py
  | - config.ini
  | - audio
-      | - RAVDESS-DB
-      |    | - 1-1-1.wav
-      |    | - ...
-      | - Toronto-DB
-      | - Database-DB
+ |    | - RAVDESS-DB
+ |    |    | - 1-1-1.wav
+ |    |    | - ...
+ |    | - Toronto-DB
+ |    | - Database-DB
+ | - cache
+      | - database.npy (automatically created)
 ```
 # file name
 ```

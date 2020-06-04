@@ -4,6 +4,8 @@
 2. Install python packages
 3. Run `main.py`
 ```
+python3 -V
+
 python3 -m venv .venv
 
 pip install -r requirements.txt

@@ -70,6 +70,10 @@ class BlackBox:
             self._cacheData(database, [cache_data, cache_labels])
         self.databases_loaded.append(database)
 
+    def clearCache(self):
+        for f in os.listdir("cache/"):
+            os.remove(f"cache/{f}")
+
     def _isCached(self, database):
         if os.path.isfile(f"cache/{database}.npy"):
             return True
@@ -93,6 +97,9 @@ class BlackBox:
             print("ERR: No database loaded")
 
     def predict(self, f=None):
+        if len(self.databases_loaded) == 0:
+            print("ERR: No database loaded")
+            sys.exit()
         if self.train:
             if f is not None:
                 # TODO get attributes for predicting files directly

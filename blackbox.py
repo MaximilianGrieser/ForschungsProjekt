@@ -10,33 +10,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
 # TODO do logging
+# TODO use config .get() with fallback values
 
 
 class BlackBox:
     def __init__(self, config):
         self.config_file = config
-        self._config = self._loadConfig(config)
-
-        self._prediction_details = int(
-            self._config['DEBUG']['prediction_details'])
-        self._verbose = int(self._config['DEBUG']['verbose'])
-
-        self._n_neighbors = int(self._config['KNN']['k'])
-        self._weights = self._config['KNN']['w']
-        self._power = int(self._config['KNN']['q'])
-        self._n_jobs = int(self._config['KNN']['n_jobs'])
-
-        self._test_size = float(self._config['DATA']['test_size'])
-        self._random_state = None if (self._config['DATA']['random_state'] == "None") else int(
-            self._config['DATA']['random_state'])
-
-        self._snippet_size = int(self._config['POLYFIT']['snippet_size'])
-        self._poly_degree = int(self._config['POLYFIT']['poly_degree'])
-
-        self.databases = [db for db in self._config['DATABASES']]
-        self.databases_loaded = []
-
-        self.emotions = [emotion for emotion in self._config['EMOTIONS']]
+        self._config = self._loadConfigFile(config)
+        self._loadConfig(wipe=True)
 
         self.data = []
         self.labels = []
@@ -53,25 +34,55 @@ class BlackBox:
     def loadData(self, database):
         counter = 0
         error = 0
-        for f in os.listdir("audio/"+database):
-            try:
-                s1 = AudioSegment.from_file(
-                    f"audio/{database}/{f}", format="wav")
-                s2 = audiosegment.from_file(f"audio/{database}/{f}")
-            except FileNotFoundError:
-                error += 1
-                print(f"[{counter} ({error})] {database}/{f}\t\t\t", end="\r")
-                continue
-            freqChange, freqAvg, freqMax = self._getFrequency(s2)
-            fdata = self._parseName(f)
-            loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
-            self.data.append(np.append(np.concatenate((self._getDerivative(
-                loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
-            self.labels.append(fdata.get("emotion_n"))
-            counter += 1
-            print(f"[{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
-        print(f"[{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
+        cache_data = []
+        cache_labels = []
+        if self._isCached(database):
+            data = np.load(f"cache/{database}.npy", allow_pickle=True)
+            for element in data[0]:
+                self.data.append(element)
+            for element in data[1]:
+                self.labels.append(element)
+            print(f"[{len(data[0])}    ] Loaded {database} from cache")
+        else:
+            for f in os.listdir("audio/"+database):
+                try:
+                    s1 = AudioSegment.from_file(
+                        f"audio/{database}/{f}", format="wav")
+                    s2 = audiosegment.from_file(f"audio/{database}/{f}")
+                except FileNotFoundError:
+                    error += 1
+                    print(f"[{counter} ({error})] {database}/{f}\t\t\t", end="\r")
+                    continue
+                freqChange, freqAvg, freqMax = self._getFrequency(s2)
+                fdata = self._parseName(f)
+                loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
+                self.data.append(np.append(np.concatenate((self._getDerivative(
+                    loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                self.labels.append(fdata.get("emotion_n"))
+                cache_data.append(np.append(np.concatenate((self._getDerivative(
+                    loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                cache_labels.append(fdata.get("emotion_n"))
+                counter += 1
+                print(
+                    f"[{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
+            print(
+                f"[{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
+            self._cacheData(database, [cache_data, cache_labels])
         self.databases_loaded.append(database)
+
+    def _isCached(self, database):
+        if os.path.isfile(f"cache/{database}.npy"):
+            return True
+        else:
+            return False
+
+    def _cacheData(self, database, data):
+        try:
+            np.save(f"cache/{database}.npy", data)
+            print(f"Added {database} to cache")
+        except FileNotFoundError:
+            print("ERR: Cache directory not found")
+
 
     def train(self):
         if len(self.databases_loaded) > 0:
@@ -103,6 +114,45 @@ class BlackBox:
                     print(f"{key}")
                 else:
                     print(f"{key}={config[section][key]}")
+
+    def updateConfig(self, section, option, value, wipe=False):
+        try:
+            self._config.set(section, option, str(value))
+            self._loadConfig(wipe=wipe)
+            self._createModel()
+            return True
+        except configparser.NoSectionError:
+            return False
+
+    def getConfigValue(self, section, option):
+        try:
+            value = self._config.get(section, option)
+            return value
+        except configparser.NoSectionError:
+            return None
+
+    def _loadConfig(self, wipe=False):
+        self._prediction_details = int(
+            self._config['DEBUG']['prediction_details'])
+        self._verbose = int(self._config['DEBUG']['verbose'])
+
+        self._n_neighbors = int(self._config['KNN']['k'])
+        self._weights = self._config['KNN']['w']
+        self._power = int(self._config['KNN']['q'])
+        self._n_jobs = int(self._config['KNN']['n_jobs'])
+
+        self._test_size = float(self._config['DATA']['test_size'])
+        self._random_state = None if (self._config['DATA']['random_state'] == "None") else int(
+            self._config['DATA']['random_state'])
+
+        self._snippet_size = int(self._config['POLYFIT']['snippet_size'])
+        self._poly_degree = int(self._config['POLYFIT']['poly_degree'])
+
+        if wipe is True:
+            self.databases = [db for db in self._config['DATABASES']]
+            self.databases_loaded = []
+
+            self.emotions = [emotion for emotion in self._config['EMOTIONS']]
 
     def _evaluatePrediction(self):
         emotion = self.emotions
@@ -183,7 +233,7 @@ class BlackBox:
         self.model = KNeighborsClassifier(
             n_neighbors=self._n_neighbors, weights=self._weights, p=self._power, n_jobs=self._n_jobs)
 
-    def _loadConfig(self, config):
+    def _loadConfigFile(self, config):
         cfg = configparser.ConfigParser(allow_no_value=True)
         cfile = cfg.read(config)
         # TODO check for valid config and database files

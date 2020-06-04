@@ -1,9 +1,9 @@
 # setup
-0.  Install Python 3.7.4+ (Anything 3+ probably works)
-0.5 Clone git
-1.  Create virtual enironment
-2.  Install python packages
-3.  Run `main.py`
+0.  Install Python 3.7.4+ (Anything 3+ probably works)  
+1.  Clone git
+2.  Create virtual enironment
+3.  Install python packages
+4.  Run `main.py`
 ```
 python3 -V
 

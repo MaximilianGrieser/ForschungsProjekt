@@ -1,5 +1,6 @@
-from blackbox import BlackBox
 import numpy as np
+
+from blackbox import BlackBox
 
 
 def main():

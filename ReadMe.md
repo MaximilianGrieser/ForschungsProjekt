@@ -1,3 +1,16 @@
+# setup
+1. Create virtual enironment
+2. Install python packages
+3. Run `main.py`
+```
+python3 -m venv .venv
+
+pip install -r requirements.txt
+
+python main.py
+
+```
+
 # file structure
 ```
 root

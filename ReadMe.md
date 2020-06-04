@@ -18,7 +18,8 @@ python main.py
 # file structure
 ```
 root
- | - knn.py
+ | - main.py
+ | - blackbox.py
  | - config.ini
  | - audio
       | - RAVDESS-DB

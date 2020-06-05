@@ -40,7 +40,8 @@ available functions and values
 b = BlackBox(config=)     # Create BlackBox from a config file
 
 # FUNCTIONS
-b.loadData(database=)     # Load database from /audio directory
+b.loadData()              # Load all configured databases
+b.loadData(database=)     # Manually load database from /audio directory
 b.clearCache()            # Delete all existing cached databases
 
 b.train()                 # Train model with loaded databases

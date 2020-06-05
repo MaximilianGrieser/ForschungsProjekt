@@ -31,45 +31,49 @@ class BlackBox:
 
         self._createModel()
 
-    def loadData(self, database):
-        counter = 0
-        error = 0
-        cache_data = []
-        cache_labels = []
-        if self._isCached(database):
-            data = np.load(f"cache/{database}.npy", allow_pickle=True)
-            for element in data[0]:
-                self.data.append(element)
-            for element in data[1]:
-                self.labels.append(element)
-            print(f"[+] [{len(data[0])}] Loaded {database} from cache")
+    def loadData(self, database=None):
+        if database is None:
+            for db in self.databases:
+                self.loadData(database=db)
         else:
-            for f in os.listdir("audio/"+database):
-                try:
-                    s1 = AudioSegment.from_file(
-                        f"audio/{database}/{f}", format="wav")
-                    s2 = audiosegment.from_file(f"audio/{database}/{f}")
-                except FileNotFoundError:
-                    error += 1
+            counter = 0
+            error = 0
+            cache_data = []
+            cache_labels = []
+            if self._isCached(database):
+                data = np.load(f"cache/{database}.npy", allow_pickle=True)
+                for element in data[0]:
+                    self.data.append(element)
+                for element in data[1]:
+                    self.labels.append(element)
+                print(f"[+] [{len(data[0])}] Loaded {database} from cache")
+            else:
+                for f in os.listdir("audio/"+database):
+                    try:
+                        s1 = AudioSegment.from_file(
+                            f"audio/{database}/{f}", format="wav")
+                        s2 = audiosegment.from_file(f"audio/{database}/{f}")
+                    except FileNotFoundError:
+                        error += 1
+                        print(
+                            f"[+] [{counter} ({error})] {database}/{f}\t\t\t", end="\r")
+                        continue
+                    freqChange, freqAvg, freqMax = self._getFrequency(s2)
+                    fdata = self._parseName(f)
+                    loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
+                    self.data.append(np.append(np.concatenate((self._getDerivative(
+                        loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                    self.labels.append(fdata.get("emotion_n"))
+                    cache_data.append(np.append(np.concatenate((self._getDerivative(
+                        loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                    cache_labels.append(fdata.get("emotion_n"))
+                    counter += 1
                     print(
-                        f"[+] [{counter} ({error})] {database}/{f}\t\t\t", end="\r")
-                    continue
-                freqChange, freqAvg, freqMax = self._getFrequency(s2)
-                fdata = self._parseName(f)
-                loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
-                self.data.append(np.append(np.concatenate((self._getDerivative(
-                    loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
-                self.labels.append(fdata.get("emotion_n"))
-                cache_data.append(np.append(np.concatenate((self._getDerivative(
-                    loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
-                cache_labels.append(fdata.get("emotion_n"))
-                counter += 1
+                        f"[+] [{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
                 print(
-                    f"[+] [{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
-            print(
-                f"[+] [{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
-            self._cacheData(database, [cache_data, cache_labels])
-        self.databases_loaded.append(database)
+                    f"[+] [{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
+                self._cacheData(database, [cache_data, cache_labels])
+            self.databases_loaded.append(database)
 
     def clearCache(self):
         counter = 0
@@ -173,6 +177,13 @@ class BlackBox:
 
             self.emotions = [emotion for emotion in self._config['EMOTIONS']]
 
+            self.data = []
+            self.labels = []
+            self.x_train = []
+            self.y_train = []
+            self.x_test = []
+            self.y_test = []
+
     def _evaluatePrediction(self):
         emotion = self.emotions
         prediction = self.predictions
@@ -267,6 +278,7 @@ class BlackBox:
         self.model = KNeighborsClassifier(
             n_neighbors=self._n_neighbors, weights=self._weights, p=self._power, n_jobs=self._n_jobs)
         self.trained = False
+        self.accuracy = False
         print(f"[+] Model created {self.model}")
 
     def _loadConfigFile(self, config):

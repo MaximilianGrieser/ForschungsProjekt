@@ -42,7 +42,7 @@ class BlackBox:
                 self.data.append(element)
             for element in data[1]:
                 self.labels.append(element)
-            print(f"[{len(data[0])}    ] Loaded {database} from cache")
+            print(f"[+] [{len(data[0])}] Loaded {database} from cache")
         else:
             for f in os.listdir("audio/"+database):
                 try:
@@ -51,7 +51,8 @@ class BlackBox:
                     s2 = audiosegment.from_file(f"audio/{database}/{f}")
                 except FileNotFoundError:
                     error += 1
-                    print(f"[{counter} ({error})] {database}/{f}\t\t\t", end="\r")
+                    print(
+                        f"[+] [{counter} ({error})] {database}/{f}\t\t\t", end="\r")
                     continue
                 freqChange, freqAvg, freqMax = self._getFrequency(s2)
                 fdata = self._parseName(f)
@@ -64,15 +65,18 @@ class BlackBox:
                 cache_labels.append(fdata.get("emotion_n"))
                 counter += 1
                 print(
-                    f"[{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
+                    f"[+] [{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
             print(
-                f"[{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
+                f"[+] [{counter} ({error})] Finished loading {database}\t\t\t\n", end="\r")
             self._cacheData(database, [cache_data, cache_labels])
         self.databases_loaded.append(database)
 
     def clearCache(self):
+        counter = 0
         for f in os.listdir("cache/"):
             os.remove(f"cache/{f}")
+            counter += 1
+        print("[+] Cleared {counter} file(s) from cache")
 
     def _isCached(self, database):
         if os.path.isfile(f"cache/{database}.npy"):
@@ -83,10 +87,9 @@ class BlackBox:
     def _cacheData(self, database, data):
         try:
             np.save(f"cache/{database}.npy", data)
-            print(f"Added {database} to cache")
+            print(f"[+] Added {database} to cache")
         except FileNotFoundError:
-            print("ERR: Cache directory not found")
-
+            print("[x] ERROR: Cache directory not found")
 
     def train(self):
         if len(self.databases_loaded) > 0:
@@ -94,48 +97,57 @@ class BlackBox:
             self.model.fit(self.x_train, self.y_train)
             self.trained = True
         else:
-            print("ERR: No database loaded")
+            print("[x] ERROR: No database loaded")
 
     def predict(self, f=None):
         if len(self.databases_loaded) == 0:
-            print("ERR: No database loaded")
+            print("[x] ERROR: No database loaded")
             sys.exit()
-        if self.train:
+        if self.trained:
             if f is not None:
-                # TODO get attributes for predicting files directly
-                pass
+                data = self._getAudioAttributes(f)
+                prediction = self.model.predict(data)
+                prediction_prob = self.model.predict_proba(data)
+                return prediction, prediction_prob
+            elif self._test_size == 0.0:
+                self.accuracy = None
             else:
                 self.predictions = self.model.predict(self.x_test)
                 self.predictions_prob = self.model.predict_proba(self.x_test)
                 self.accuracy = self.model.score(self.x_test, self.y_test)
                 self._evaluatePrediction()
         else:
-            print("ERR: Model not trained")
+            print("[x] ERROR: Model not trained")
 
     def printConfig(self):
         config = self._config
         for section in config.sections():
-            print(f"[{section}]")
+            print(f"[+] [{section}]")
             for key in config[section]:
                 if config[section][key] == None:
-                    print(f"{key}")
+                    print(f"    {key}")
                 else:
-                    print(f"{key}={config[section][key]}")
+                    print(f"    {key}={config[section][key]}")
 
     def updateConfig(self, section, option, value, wipe=False):
         try:
+            if section=="POLYFIT":
+                print(f"[-] Updating [POLYFIT] parameters invalidate cache files. It is strongly recommended to 'clearCache()'")
             self._config.set(section, option, str(value))
             self._loadConfig(wipe=wipe)
+            print(f"[+] Config updated: [{section}] {option} = {value}")
             self._createModel()
             return True
-        except configparser.NoSectionError:
+        except configparser.NoSectionError as err:
+            print(f"[x] ERROR: {err}")
             return False
 
     def getConfigValue(self, section, option):
         try:
             value = self._config.get(section, option)
             return value
-        except configparser.NoSectionError:
+        except configparser.NoSectionError as err:
+            print(f"[x] ERROR: {err}")
             return None
 
     def _loadConfig(self, wipe=False):
@@ -174,19 +186,34 @@ class BlackBox:
             else:
                 result = "FALSE"
             if self._prediction_details:
-                print("[{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
-                                                                                      emotion[prediction[i] -
-                                                                                              1].upper(),
-                                                                                      emotion[y_test[i] -
-                                                                                              1].upper(),
-                                                                                      np.array_repr(
-                                                                                          prediction_prob[i]).replace('\n', ''),
-                                                                                      emotion))
+                print("[+] [{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
+                                                                                          emotion[prediction[i] -
+                                                                                                  1].upper(),
+                                                                                          emotion[y_test[i] -
+                                                                                                  1].upper(),
+                                                                                          np.array_repr(
+                                                                                              prediction_prob[i]).replace('\n', ''),
+                                                                                          emotion))
         # TODO advanced evaluation which emotions are classified wrong the most
 
     def _splitData(self):
-        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-            self.data, self.labels, test_size=self._test_size, random_state=self._random_state)
+        if self._test_size == 0.0:
+            print("[-] Using entire database for training, no test data available; use predict(f='audio.wav') to pass a file")
+            self.x_train, self.y_train = self.data, self.labels
+        else:
+            self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
+                self.data, self.labels, test_size=self._test_size, random_state=self._random_state)
+
+    def _getAudioAttributes(self, f):
+        # TODO error handling for reading single files
+        data = []
+        s1 = AudioSegment.from_file(f, format="wav")
+        s2 = audiosegment.from_file(f)
+        freqChange, freqAvg, freqMax = self._getFrequency(s2)
+        loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
+        data.append(np.append(np.concatenate((self._getDerivative(
+                    loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+        return data
 
     def _getLoudness(self, s):
         xdata = []
@@ -239,12 +266,14 @@ class BlackBox:
     def _createModel(self):
         self.model = KNeighborsClassifier(
             n_neighbors=self._n_neighbors, weights=self._weights, p=self._power, n_jobs=self._n_jobs)
+        self.trained = False
+        print(f"[+] Model created {self.model}")
 
     def _loadConfigFile(self, config):
         cfg = configparser.ConfigParser(allow_no_value=True)
         cfile = cfg.read(config)
         # TODO check for valid config and database files
         if not cfile:
-            print("ERR: Failed loading config")
+            print("[x] ERROR: Failed loading config")
             sys.exit()
         return cfg

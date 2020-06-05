@@ -1,4 +1,4 @@
-# setup
+## setup
 0.  Install Python 3.7.4+ (Anything 3+ probably works)  
 1.  Clone git
 2.  Create virtual enironment and activate it
@@ -18,7 +18,7 @@ python main.py
 
 ```
 
-# file structure
+## file structure
 ```
 root
  | - main.py
@@ -33,14 +33,33 @@ root
  | - cache
       | - database.npy (automatically created)
 ```
-# file name
+## blackbox doc
+
+available functions and values
 ```
-1-1-1.wav
-| | |_ id
-| |___ male [1] or female [2]
-|_____ emotion ("happy", "suprise", "angry", "sad", "fear", "disgust", "neutral")
+b = BlackBox(config=)     # Create BlackBox from a config file
+
+# FUNCTIONS
+b.loadData(database=)     # Load database from /audio directory
+b.clearCache()            # Delete all existing cached databases
+
+b.train()                 # Train model with loaded databases
+
+b.predict()               # Predict test data (test_split > 0.0)
+b.predict(f=)             # Predict single file (test_split >= 0.0)
+
+b.updateConfig(section, option, value, wipe=False)  # Update a single config parameter, wipe clears loaded databases
+b.getConfigValue(section, option)                   # Get single config parameter value
+b.printConfig()                                     # Dump complete config to console
+
+# VALUES    
+b.accuracy                # BlackBox accuracy after predicting using train/test split  (test_split > 0.0)       
+b.databases               # Databases configured in config
+b.databases_loaded        # All databases that have been loaded
+b.emotions                # Emotions configured in config
 ```
-# config structure
+
+## config structure
 ```
 [DEBUG]
 verbose=0
@@ -77,4 +96,12 @@ sad
 fear
 disgust
 neutral
+```
+
+## audio file name
+```
+1-1-1.wav
+| | |_ id
+| |___ male [1] or female [2]
+|_____ emotion ("happy", "suprise", "angry", "sad", "fear", "disgust", "neutral")
 ```

@@ -1,6 +1,8 @@
 import configparser
+import hashlib
 import os
 import sys
+import time as t
 
 import audiosegment
 import numpy as np
@@ -26,8 +28,14 @@ class BlackBox:
         self.x_test = []
         self.y_test = []
 
-        self.predictions = []
-        self.predictions_prob = []
+        rng = np.random.default_rng()
+        self.random_1 = rng.integers(0, high=12)*2
+        self.random_2 = (rng.integers(0, high=12)*2)+1
+        print(f"[+] random numbers {self.random_1}, {self.random_2}")
+
+        self.predictions = [[], []]
+        self.predictions_prob = [[], []]
+        self.accuracy_topf = []
 
         self._createModel()
 
@@ -42,11 +50,18 @@ class BlackBox:
             cache_labels = []
             if self._isCached(database):
                 data = np.load(f"cache/{database}.npy", allow_pickle=True)
-                for element in data[0]:
-                    self.data.append(element)
-                for element in data[1]:
-                    self.labels.append(element)
-                print(f"[+] [{len(data[0])}] Loaded {database} from cache")
+                if database.split("_")[0] == "actor" and (int(database.split("_")[1]) == self.random_1 or int(database.split("_")[1]) == self.random_2):
+                    for element in data[0]:
+                        self.x_test2.append(element)
+                    for element in data[1]:
+                        self.y_test2.append(element)
+                    print(f"[+] [{len(data[0])}] Loaded {database} from cache and added to EXTERNE VALIDITÄT (TOPF)")
+                else:
+                    for element in data[0]:
+                        self.data.append(element)
+                    for element in data[1]:
+                        self.labels.append(element)
+                    print(f"[+] [{len(data[0])}] Loaded {database} from cache")
             else:
                 for f in os.listdir("audio/"+database):
                     try:
@@ -61,12 +76,20 @@ class BlackBox:
                     freqChange, freqAvg, freqMax = self._getFrequency(s2)
                     fdata = self._parseName(f)
                     loudPoly, dBFS, maxDBFS = self._getLoudness(s1)
-                    self.data.append(np.append(np.concatenate((self._getDerivative(
-                        loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
-                    self.labels.append(fdata.get("emotion_n"))
+                    if database.split("_")[0] == "actor" and (int(database.split("_")[1]) == self.random_1 or int(database.split("_")[1]) == self.random_2):
+                        self.x_test2.append(np.append(np.concatenate((self._getDerivative(
+                            loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                        self.y_test2.append(
+                            [fdata.get("emotion_n"), fdata.get("actor_n")])
+                    else:
+                        self.data.append(np.append(np.concatenate((self._getDerivative(
+                            loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
+                        self.labels.append(
+                            [fdata.get("emotion_n"), fdata.get("actor_n")])
                     cache_data.append(np.append(np.concatenate((self._getDerivative(
                         loudPoly),  self._getDerivative(freqChange))), [dBFS, maxDBFS, freqAvg, freqMax]))
-                    cache_labels.append(fdata.get("emotion_n"))
+                    cache_labels.append(
+                        [fdata.get("emotion_n"), fdata.get("actor_n")])
                     counter += 1
                     print(
                         f"[+] [{counter} ({error})] Loading {database}/{f}...\t\t\t", end="\r")
@@ -96,9 +119,36 @@ class BlackBox:
             print("[x] ERROR: Cache directory not found")
 
     def train(self):
+        counter = 0
+        valid = False
         if len(self.databases_loaded) > 0:
-            self._splitData()
-            self.model.fit(self.x_train, self.y_train)
+            if self._test_size > 0.0:
+                while (not valid):
+                    labels = []
+                    self._splitData()
+                    for array in self.y_test:
+                        labels.append(array[1])
+                    if labels.count(1)/len(labels) > 0.3 and labels.count(1)/len(labels) < 0.7:
+                        valid = True
+                    else:
+                        print(
+                            f"[-] [{counter}] Splitting data... Last ratio {labels.count(0)/len(labels)}m/{labels.count(1)/len(labels)}f \t\t", end="\r")
+                    if counter >= 1000:
+                        print("")
+                        print(
+                            f"[x] Unable to find valid data split after {counter} tries.")
+                        sys.exit()
+                    counter += 1
+                print(
+                    f"[+] Found valid data split after {counter} run(s). {labels.count(0)/len(labels)} male / {labels.count(1)/len(labels)} female ")
+            else:
+                self._splitData()
+            labels = []
+            for array in self.y_train:
+                labels.append(array[0])
+            b = np.array(self.x_train).view(np.uint8)
+            self.train_hash = hashlib.sha1(b).hexdigest()
+            self.model.fit(self.x_train, labels)
             self.trained = True
         else:
             print("[x] ERROR: No database loaded")
@@ -116,9 +166,26 @@ class BlackBox:
             elif self._test_size == 0.0:
                 self.accuracy = None
             else:
-                self.predictions = self.model.predict(self.x_test)
-                self.predictions_prob = self.model.predict_proba(self.x_test)
-                self.accuracy = self.model.score(self.x_test, self.y_test)
+                b = np.array(self.x_test).view(np.uint8)
+                self.test_hash = hashlib.sha1(b).hexdigest()
+
+                labels = []
+                for array in self.y_test:
+                    labels.append(array[0])
+
+                self.predictions[0].append(self.model.predict(self.x_test))
+                self.predictions_prob[0].append(self.model.predict_proba(self.x_test))
+                self.accuracy = self.model.score(self.x_test, labels)
+
+                labels2 = []
+                for array in self.y_test2:
+                    labels2.append(array[0])
+
+                self.predictions[1].append(self.model.predict(self.x_test2))
+                self.predictions_prob[1].append(self.model.predict_proba(self.x_test2))
+                self.accuracy_2 = self.model.score(self.x_test2, labels2)
+
+
                 self._evaluatePrediction()
         else:
             print("[x] ERROR: Model not trained")
@@ -135,8 +202,9 @@ class BlackBox:
 
     def updateConfig(self, section, option, value, wipe=False):
         try:
-            if section=="POLYFIT":
-                print(f"[-] Updating [POLYFIT] parameters invalidate cache files. It is strongly recommended to 'clearCache()'")
+            if section == "POLYFIT":
+                print(
+                    f"[-] Updating [POLYFIT] parameters invalidate cache files. It is strongly recommended to 'clearCache()'")
             self._config.set(section, option, str(value))
             self._loadConfig(wipe=wipe)
             print(f"[+] Config updated: [{section}] {option} = {value}")
@@ -184,28 +252,60 @@ class BlackBox:
             self.x_test = []
             self.y_test = []
 
+            self.x_test2 = []
+            self.y_test2 = []
+
+            self.test_hash = None
+            self.train_hash = None
+
     def _evaluatePrediction(self):
         emotion = self.emotions
-        prediction = self.predictions
-        prediction_prob = self.predictions_prob
-        y_test = self.y_test
-        self.x_test_n = len(self.x_test)
-        for i in range(0, len(prediction)):
-            if y_test[i] == prediction[i]:
-                result = "TRUE"
-
+        for x in range(0, 2):
+            prediction = self.predictions[x]
+            prediction_prob = self.predictions_prob[x]
+            y_test_emotion = []
+            y_test_gender = []
+            if x == 0:
+                for array in self.y_test:
+                    y_test_emotion.append(array[0])
+                for array in self.y_test:
+                    y_test_gender.append(array[1])
+                self.x_test_n = len(self.x_test)
             else:
-                result = "FALSE"
-            if self._prediction_details:
-                print("[+] [{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
-                                                                                          emotion[prediction[i] -
-                                                                                                  1].upper(),
-                                                                                          emotion[y_test[i] -
-                                                                                                  1].upper(),
-                                                                                          np.array_repr(
-                                                                                              prediction_prob[i]).replace('\n', ''),
-                                                                                          emotion))
-        # TODO advanced evaluation which emotions are classified wrong the most
+                for array in self.y_test2:
+                    y_test_emotion.append(array[0])
+                for array in self.y_test2:
+                    y_test_gender.append(array[1])
+                self.x_test_n = len(self.x_test2)
+            self.accuracy_topf.append(np.zeros((2, 7, 3)))
+            for i in range(0, len(prediction[0])):
+                if y_test_emotion[i] == prediction[0][i]:
+                    result = "TRUE"
+                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][0] += 1
+                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][1] += 1
+                else:
+                    result = "FALSE"
+                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][1] += 1
+
+                if self._prediction_details:
+                    print("[+] [{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
+                                                                                              emotion[prediction[i] -
+                                                                                                      1].upper(),
+                                                                                              emotion[y_test_emotion[i] -
+                                                                                                      1].upper(),
+                                                                                              np.array_repr(
+                                                                                                  prediction_prob[i]).replace('\n', ''),
+                                                                                              emotion))
+            for gender in self.accuracy_topf[x]:
+                for emotion in gender:
+                    if emotion[1] != 0:
+                        emotion[2] = emotion[0]/emotion[1]
+                    else:
+                        emotion[2] = -1
+
+            # TODO advanced evaluation which emotions are classified wrong the most
+            # # accuracy for male / female
+            # # accuracy for each emotion
 
     def _splitData(self):
         if self._test_size == 0.0:
@@ -213,7 +313,7 @@ class BlackBox:
             self.x_train, self.y_train = self.data, self.labels
         else:
             self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-                self.data, self.labels, test_size=self._test_size, random_state=self._random_state)
+                self.data, self.labels, test_size=self._test_size, random_state=self._random_state, shuffle=True)
 
     def _getAudioAttributes(self, f):
         # TODO error handling for reading single files

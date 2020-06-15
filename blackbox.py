@@ -8,10 +8,9 @@ import audiosegment
 import numpy as np
 from pydub import AudioSegment
 from pydub.utils import make_chunks
+from scipy.stats import binom
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
-
-from scipy.stats import binom
 
 # TODO do logging
 # TODO use config .get() with fallback values
@@ -31,9 +30,9 @@ class BlackBox:
         self.y_test = []
 
         rng = np.random.default_rng()
-        self.random_1 = rng.integers(0, high=12)*2
-        self.random_2 = (rng.integers(0, high=12)*2)+1
-        print(f"[+] random numbers {self.random_1}, {self.random_2}")
+        self.random_1 = (rng.integers(0, high=12)*2)+1
+        self.random_2 = (rng.integers(0, high=12)*2)+2
+        print(f"[+] Random {self.random_1}, {self.random_2}")
 
         self.predictions = [[], []]
         self.predictions_prob = [[], []]
@@ -57,7 +56,8 @@ class BlackBox:
                         self.x_test2.append(element)
                     for element in data[1]:
                         self.y_test2.append(element)
-                    print(f"[+] [{len(data[0])}] Loaded {database} from cache and added to EXTERNE VALIDITÄT (TOPF)")
+                    print(
+                        f"[+] [{len(data[0])}] Loaded {database} from cache and added to EXTERNE VALIDITÄT (TOPF)")
                 else:
                     for element in data[0]:
                         self.data.append(element)
@@ -130,12 +130,16 @@ class BlackBox:
                     self._splitData()
                     for array in self.y_test:
                         labels.append(array[1])
-                    if labels.count(1)/len(labels) > 0.3 and labels.count(1)/len(labels) < 0.7:
+                    all_labels = []
+                    for array in self.labels:
+                        all_labels.append(array[1])
+                    data_ratio = all_labels.count(1)/len(all_labels)
+                    if labels.count(1)/len(labels) > data_ratio-0.0001 and labels.count(1)/len(labels) < data_ratio+0.0001:
                         valid = True
                     else:
                         print(
                             f"[-] [{counter}] Splitting data... Last ratio {labels.count(0)/len(labels)}m/{labels.count(1)/len(labels)}f \t\t", end="\r")
-                    if counter >= 1000:
+                    if counter >= 10000:
                         print("")
                         print(
                             f"[x] Unable to find valid data split after {counter} tries.")
@@ -175,8 +179,10 @@ class BlackBox:
                 for array in self.y_test:
                     labels.append(array[0])
 
+                print(f"[+] x_test_n = {len(self.x_test)}, x_test2_n = {len(self.x_test2)}")
                 self.predictions[0].append(self.model.predict(self.x_test))
-                self.predictions_prob[0].append(self.model.predict_proba(self.x_test))
+                self.predictions_prob[0].append(
+                    self.model.predict_proba(self.x_test))
                 self.accuracy = self.model.score(self.x_test, labels)
 
                 labels2 = []
@@ -184,9 +190,9 @@ class BlackBox:
                     labels2.append(array[0])
 
                 self.predictions[1].append(self.model.predict(self.x_test2))
-                self.predictions_prob[1].append(self.model.predict_proba(self.x_test2))
+                self.predictions_prob[1].append(
+                    self.model.predict_proba(self.x_test2))
                 self.accuracy_2 = self.model.score(self.x_test2, labels2)
-
 
                 self._evaluatePrediction()
         else:
@@ -245,6 +251,9 @@ class BlackBox:
             self.databases = [db for db in self._config['DATABASES']]
             self.databases_loaded = []
 
+            self.alpha = float(self._config['SIGNIFICANCE']['a'])
+            self.p = float(self._config['SIGNIFICANCE']['p'])
+
             self.emotions = [emotion for emotion in self._config['EMOTIONS']]
 
             self.data = []
@@ -283,11 +292,14 @@ class BlackBox:
             for i in range(0, len(prediction[0])):
                 if y_test_emotion[i] == prediction[0][i]:
                     result = "TRUE"
-                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][0] += 1
-                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][1] += 1
+                    self.accuracy_topf[x][y_test_gender[i]
+                                          ][y_test_emotion[i]-1][0] += 1
+                    self.accuracy_topf[x][y_test_gender[i]
+                                          ][y_test_emotion[i]-1][1] += 1
                 else:
                     result = "FALSE"
-                    self.accuracy_topf[x][y_test_gender[i]][y_test_emotion[i]-1][1] += 1
+                    self.accuracy_topf[x][y_test_gender[i]
+                                          ][y_test_emotion[i]-1][1] += 1
 
                 if self._prediction_details:
                     print("[+] [{:5s}]\nprediction={} key={}\nprob={}\n\t   {}\n---\n".format(result,
@@ -305,9 +317,6 @@ class BlackBox:
                     else:
                         emotion[2] = -1
 
-            # TODO advanced evaluation which emotions are classified wrong the most
-            # # accuracy for male / female
-            # # accuracy for each emotion
 
     def _splitData(self):
         if self._test_size == 0.0:
@@ -401,5 +410,5 @@ class BlackBox:
         Returns:
             boolean -- Is significant
     """
-    def significant(k, n, p, a):
-        return (1 - binom.cdf(k, n, p)) <= a/100
+    def significant(self, k, n):
+        return (1 - binom.cdf(k, n, self.p)) <= self.alpha/100

@@ -11,6 +11,8 @@ from pydub.utils import make_chunks
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
+from scipy.stats import binom
+
 # TODO do logging
 # TODO use config .get() with fallback values
 
@@ -389,3 +391,15 @@ class BlackBox:
             print("[x] ERROR: Failed loading config")
             sys.exit()
         return cfg
+
+    """This function evaluates whether a probe is significant or not
+        Arguments:
+            k {int} -- Positive tests
+            n {int} -- Probe size
+            p {float} -- Probability
+            a {float} -- Significance level alpha in %
+        Returns:
+            boolean -- Is significant
+    """
+    def significant(k, n, p, a):
+        return (1 - binom.cdf(k, n, p)) <= a/100
